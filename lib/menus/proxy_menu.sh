@@ -364,98 +364,24 @@ auto_detect_proxy() {
     echo -e "${CYAN}Attempting to auto-detect proxy settings...${NC}"
     echo ""
 
-    local detected_proxies=()
-    local proxy_list_file="$DEFAULT_WORKDIR/proxy_list.txt"
-
-    # Check for proxy_list.txt file
-    if [[ -f "$proxy_list_file" ]]; then
-        echo -e "${GREEN}✅ Found proxy_list.txt file${NC}"
-        echo -e "${BLUE}Reading proxies from $proxy_list_file...${NC}"
-
-        local line_count=0
-        local valid_count=0
-
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            # Skip empty lines and comments
-            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-
-            line_count=$((line_count + 1))
-
-            # Parse proxy format: protocol://[username:password@]host:port
-            if [[ "$line" =~ ^(https?|socks[45]?)://.*:[0-9]+$ ]]; then
-                detected_proxies+=("$line")
-                valid_count=$((valid_count + 1))
-                echo -e "${GREEN}  ✅ Valid proxy: $line${NC}"
-            else
-                echo -e "${YELLOW}  ⚠️  Invalid format: $line${NC}"
-            fi
-        done < "$proxy_list_file"
-
-        echo -e "${CYAN}Found $valid_count valid proxies out of $line_count lines${NC}"
-        echo ""
-    else
-        echo -e "${YELLOW}⚠️  No proxy_list.txt file found at: $proxy_list_file${NC}"
-        echo -e "${BLUE}You can create one with proxy entries like:${NC}"
-        echo -e "${GRAY}  http://proxy.company.com:8080${NC}"
-        echo -e "${GRAY}  https://user:pass@proxy.example.com:3128${NC}"
-        echo -e "${GRAY}  socks5://127.0.0.1:1080${NC}"
-        echo ""
-    fi
-
     # Check environment variables
-    echo -e "${BLUE}Checking environment variables...${NC}"
-    local env_found=false
-
     if [[ -n "${http_proxy:-}" ]]; then
         echo -e "${GREEN}✅ Found http_proxy: $http_proxy${NC}"
-        detected_proxies+=("$http_proxy")
-        env_found=true
     fi
 
     if [[ -n "${https_proxy:-}" ]]; then
         echo -e "${GREEN}✅ Found https_proxy: $https_proxy${NC}"
-        detected_proxies+=("$https_proxy")
-        env_found=true
     fi
-
-    if [[ -n "${SOCKS_PROXY:-}" ]]; then
-        echo -e "${GREEN}✅ Found SOCKS_PROXY: $SOCKS_PROXY${NC}"
-        detected_proxies+=("$SOCKS_PROXY")
-        env_found=true
-    fi
-
-    if [[ "$env_found" == false ]]; then
-        echo -e "${YELLOW}⚠️  No proxy environment variables found${NC}"
-    fi
-    echo ""
 
     # Check system proxy settings on different platforms
-    echo -e "${BLUE}Checking system proxy settings...${NC}"
     if command -v gsettings >/dev/null 2>&1; then
         local gnome_proxy_mode
         gnome_proxy_mode=$(gsettings get org.gnome.system.proxy mode 2>/dev/null || echo "'none'")
 
         if [[ "$gnome_proxy_mode" != "'none'" ]]; then
             echo -e "${GREEN}✅ GNOME proxy detected: $gnome_proxy_mode${NC}"
-
-            # Try to get actual proxy settings
-            local gnome_proxy_host
-            local gnome_proxy_port
-            gnome_proxy_host=$(gsettings get org.gnome.system.proxy.http host 2>/dev/null || echo "")
-            gnome_proxy_port=$(gsettings get org.gnome.system.proxy.http port 2>/dev/null || echo "")
-
-            if [[ -n "$gnome_proxy_host" && -n "$gnome_proxy_port" && "$gnome_proxy_host" != "''" ]]; then
-                local gnome_proxy="http://${gnome_proxy_host//\'/}:${gnome_proxy_port}"
-                detected_proxies+=("$gnome_proxy")
-                echo -e "${GREEN}  → Proxy URL: $gnome_proxy${NC}"
-            fi
-        else
-            echo -e "${YELLOW}⚠️  No GNOME proxy configuration found${NC}"
         fi
-    else
-        echo -e "${YELLOW}⚠️  gsettings not available (not running GNOME)${NC}"
     fi
-    echo ""
 
     # Check common proxy ports
     echo -e "${BLUE}Scanning for common proxy services...${NC}"
@@ -464,54 +390,14 @@ auto_detect_proxy() {
     local found_proxy=false
 
     for port in "${common_ports[@]}"; do
-        if command -v nc >/dev/null 2>&1 && nc -z localhost "$port" 2>/dev/null; then
+        if nc -z localhost "$port" 2>/dev/null; then
             echo -e "${GREEN}✅ Found service on localhost:$port${NC}"
-            detected_proxies+=("http://localhost:$port")
             found_proxy=true
         fi
     done
 
     if [[ "$found_proxy" == false ]]; then
         echo -e "${YELLOW}⚠️  No local proxy services detected${NC}"
-    fi
-    echo ""
-
-    # Summary of detected proxies
-    if [[ ${#detected_proxies[@]} -gt 0 ]]; then
-        echo -e "${GREEN}${BOLD}📋 Summary: Found ${#detected_proxies[@]} potential proxy(ies)${NC}"
-        for i in "${!detected_proxies[@]}"; do
-            echo -e "${CYAN}  $((i+1)). ${detected_proxies[i]}${NC}"
-        done
-        echo ""
-
-        read -rp "$(echo -e "${PURPLE}Would you like to configure one of these proxies? [y/N]: ${NC}")" configure_choice
-        if [[ "$configure_choice" =~ ^[Yy]$ ]]; then
-            echo ""
-            read -rp "Enter proxy number to configure [1-${#detected_proxies[@]}]: " proxy_choice
-
-            if [[ "$proxy_choice" =~ ^[0-9]+$ ]] && [[ "$proxy_choice" -ge 1 ]] && [[ "$proxy_choice" -le ${#detected_proxies[@]} ]]; then
-                local selected_proxy="${detected_proxies[$((proxy_choice-1))]}"
-                echo -e "${GREEN}Selected proxy: $selected_proxy${NC}"
-
-                # Determine proxy type and save configuration
-                if [[ "$selected_proxy" =~ ^socks ]]; then
-                    save_proxy_config "socks5" "$selected_proxy"
-                else
-                    save_proxy_config "http" "$selected_proxy"
-                fi
-
-                apply_proxy_settings
-                echo -e "${GREEN}✅ Proxy configured successfully${NC}"
-            else
-                echo -e "${RED}❌ Invalid selection${NC}"
-            fi
-        fi
-    else
-        echo -e "${YELLOW}⚠️  No proxies detected${NC}"
-        echo -e "${BLUE}💡 You can:${NC}"
-        echo -e "${GRAY}  1. Create proxy_list.txt with your proxy servers${NC}"
-        echo -e "${GRAY}  2. Set environment variables (http_proxy, https_proxy)${NC}"
-        echo -e "${GRAY}  3. Configure manually using options 1 or 2${NC}"
     fi
 
     echo ""

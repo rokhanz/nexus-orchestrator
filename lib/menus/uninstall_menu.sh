@@ -69,106 +69,33 @@ remove_containers_only() {
     echo -e "${YELLOW}⚠️  Container data will be lost${NC}"
     echo ""
 
-    # Check if Docker is available
-    if ! command -v docker >/dev/null 2>&1; then
+    # Show current containers
+    if command -v docker >/dev/null 2>&1; then
+        local containers
+        containers=$(docker ps -a --filter "name=nexus" --format "{{.Names}}" 2>/dev/null)
+
+        if [[ -z "$containers" ]]; then
+            echo -e "${GREEN}✅ No Nexus containers found${NC}"
+            read -rp "Press Enter to continue..."
+            return 0
+        fi
+
+        echo -e "${CYAN}Found Nexus containers:${NC}"
+        while IFS= read -r container; do
+            if [[ -n "$container" ]]; then
+                local status
+                status=$(docker inspect "$container" --format "{{.State.Status}}" 2>/dev/null || echo "unknown")
+                echo "  - $container ($status)"
+            fi
+        done <<< "$containers"
+        echo ""
+    else
         echo -e "${RED}❌ Docker not available${NC}"
-        echo -e "${YELLOW}💡 Please install Docker first${NC}"
         read -rp "Press Enter to continue..."
         return 1
     fi
 
-    # Show current containers
-    local containers
-    containers=$(docker ps -a --filter "name=nexus" --format "{{.Names}}" 2>/dev/null)
-
-    if [[ -z "$containers" ]]; then
-        echo -e "${GREEN}✅ No Nexus containers found${NC}"
-        read -rp "Press Enter to continue..."
-        return 0
-    fi
-
-    echo -e "${CYAN}Individual Node Status:${NC}"
-    local container_array=()
-    local i=1
-    while IFS= read -r container; do
-        if [[ -n "$container" ]]; then
-            container_array+=("$container")
-            local status
-            status=$(docker inspect "$container" --format "{{.State.Status}}" 2>/dev/null || echo "unknown")
-            local status_icon="❌"
-            local status_color="$RED"
-
-            case "$status" in
-                "running")
-                    status_icon="✅"
-                    status_color="$GREEN"
-                    ;;
-                "paused")
-                    status_icon="⏸️"
-                    status_color="$YELLOW"
-                    ;;
-                "restarting")
-                    status_icon="🔄"
-                    status_color="$CYAN"
-                    ;;
-                *)
-                    status_icon="❌"
-                    status_color="$RED"
-                    status="Stopped"
-                    ;;
-            esac
-
-            echo -e "    ${GREEN}$i.${NC} ${CYAN}$container${NC}  ${status_color}$status_icon $status${NC}"
-            ((i++))
-        fi
-    done <<< "$containers"
-    echo ""
-
-    # Add option for individual container management
-    echo -e "${CYAN}Options:${NC}"
-    echo -e "  ${GREEN}A.${NC} Remove All Containers"
-    echo -e "  ${GREEN}I.${NC} Stop/Remove Individual Container"
-    echo -e "  ${GREEN}C.${NC} Cancel"
-    echo ""
-
-    read -rp "Select option [A/I/C]: " remove_choice
-    case "$remove_choice" in
-        [Aa])
-            # Continue with all containers removal
-            ;;
-        [Ii])
-            echo ""
-            read -rp "Enter container number to stop/remove (1-$((i-1))): " container_num
-            if [[ "$container_num" =~ ^[0-9]+$ ]] && [[ $container_num -ge 1 && $container_num -le $((i-1)) ]]; then
-                local selected_container="${container_array[$((container_num-1))]}"
-                echo -e "${CYAN}Removing container: ${BOLD}$selected_container${NC}"
-
-                # Stop and remove individual container
-                docker stop "$selected_container" 2>/dev/null || true
-                if docker rm -f "$selected_container" 2>/dev/null; then
-                    echo -e "${GREEN}✅ Container $selected_container removed successfully${NC}"
-                else
-                    echo -e "${RED}❌ Failed to remove container $selected_container${NC}"
-                fi
-            else
-                echo -e "${RED}❌ Invalid container number${NC}"
-            fi
-            read -rp "Press Enter to continue..."
-            return 0
-            ;;
-        [Cc])
-            return 0
-            ;;
-        *)
-            echo -e "${RED}❌ Invalid option${NC}"
-            read -rp "Press Enter to continue..."
-            return 0
-            ;;
-    esac
-
-    # Only ask for confirmation if proceeding with all containers removal
-    echo ""
-    read -rp "Are you sure you want to remove ALL these containers? [y/N]: " confirm
+    read -rp "Are you sure you want to remove these containers? [y/N]: " confirm
 
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         return 0
@@ -177,27 +104,10 @@ remove_containers_only() {
     init_multi_step 3
 
     next_step "Stopping running containers"
-    # Use --remove-orphans to clean up orphaned containers and networks
-    if docker-compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans 2>/dev/null; then
-        log_success "Containers stopped and orphans cleaned"
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" down 2>/dev/null; then
+        log_success "Containers stopped"
     else
-        log_warning "Some containers may not have stopped gracefully - trying force cleanup"
-        # Force cleanup if normal stop fails
-        local containers
-        containers=$(docker ps -a --filter "name=nexus" --format "{{.Names}}" 2>/dev/null)
-        if [[ -n "$containers" ]]; then
-            while IFS= read -r container; do
-                if [[ -n "$container" ]]; then
-                    docker rm -f "$container" 2>/dev/null || true
-                fi
-            done <<< "$containers"
-        fi
-        # Force remove networks with active endpoints
-        docker network ls --filter "name=nexus" --format "{{.Name}}" | while read -r network; do
-            if [[ -n "$network" ]]; then
-                docker network rm "$network" 2>/dev/null || true
-            fi
-        done
+        log_warning "Some containers may not have stopped gracefully"
     fi
 
     next_step "Removing containers"

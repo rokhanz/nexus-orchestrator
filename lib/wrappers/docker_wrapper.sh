@@ -10,12 +10,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 # DOCKER WRAPPER CONFIGURATION
 # =============================================================================
 
-# Prevent redefinition of readonly variables
-if [[ -z "${DOCKER_WRAPPER_MAX_RETRIES:-}" ]]; then
-    readonly DOCKER_WRAPPER_MAX_RETRIES=3
-    readonly DOCKER_WRAPPER_RETRY_DELAY=5
-    readonly DOCKER_WRAPPER_TIMEOUT=300
-fi
+readonly DOCKER_WRAPPER_MAX_RETRIES=3
+readonly DOCKER_WRAPPER_RETRY_DELAY=5
+readonly DOCKER_WRAPPER_TIMEOUT=300
 
 # =============================================================================
 # MAIN DOCKER WRAPPER FUNCTION
@@ -29,7 +26,7 @@ docker_wrapper() {
 
     # Auto-build docker-compose if needed for container operations
     if [[ "$operation" =~ ^(start|restart|status|health)$ ]]; then
-        if ! ensure_docker_compose_exists "false"; then
+        if ! ensure_docker_compose_exists; then
             handle_error "Failed to auto-generate docker-compose.yml"
             return 1
         fi
@@ -93,51 +90,12 @@ docker_wrapper() {
 # AUTO-BUILD DOCKER COMPOSE
 # =============================================================================
 
-get_expected_services() {
-    local node_id
-    node_id=$(read_config_value "node_id" 2>/dev/null || echo "[]")
-
-    if [[ "$node_id" == "[]" || -z "$node_id" ]]; then
-        echo ""
-        return
-    fi
-
-    echo "$node_id" | jq -r '.[]' 2>/dev/null | while read -r node_entry; do
-        echo "nexus-node-${node_entry}"
-    done | sort
-}
-
-# Ensure docker-compose.yml exists and is up to date
-# shellcheck disable=SC2120  # Function may be called with or without arguments
 ensure_docker_compose_exists() {
-    local force_overwrite="${1:-false}"
-
-    # Check if configuration has changed and force regeneration
-    if [[ "${NEXUS_CONFIG_CHANGED:-}" == "true" ]]; then
-        log_info "Configuration changed detected, forcing docker-compose regeneration..."
-        force_overwrite="true"
-        unset NEXUS_CONFIG_CHANGED
-    fi
-
     # Check if docker-compose.yml exists and is valid
     if [[ -f "$DOCKER_COMPOSE_FILE" ]]; then
-        if [[ "$force_overwrite" == "true" ]]; then
-            log_info "Force overwrite requested, backing up existing file..."
-            backup_file "$DOCKER_COMPOSE_FILE"
-        elif docker-compose -f "$DOCKER_COMPOSE_FILE" config >/dev/null 2>&1; then
-            # Check if the compose file matches current config
-            local current_services
-            current_services=$(docker-compose -f "$DOCKER_COMPOSE_FILE" config --services 2>/dev/null)
-            local expected_services
-            expected_services=$(get_expected_services)
-
-            if [[ "$current_services" != "$expected_services" ]]; then
-                log_info "Docker compose services don't match current configuration, regenerating..."
-                backup_file "$DOCKER_COMPOSE_FILE"
-            else
-                log_debug "Docker compose file exists and matches current configuration"
-                return 0
-            fi
+        if docker-compose -f "$DOCKER_COMPOSE_FILE" config >/dev/null 2>&1; then
+            log_debug "Docker compose file exists and is valid"
+            return 0
         else
             log_warning "Existing docker-compose.yml is invalid, rebuilding..."
             backup_file "$DOCKER_COMPOSE_FILE"
@@ -229,26 +187,6 @@ create_smart_docker_compose() {
 
     ensure_directories
 
-    # If no parameters provided, get from config
-    if [[ -z "$wallet_address" ]]; then
-        wallet_address=$(read_config_value "wallet_address")
-    fi
-
-    if [[ -z "$node_id" ]]; then
-        node_id=$(read_config_value "node_id")
-    fi
-
-    # Validate inputs
-    if [[ -z "$wallet_address" || "$wallet_address" == "null" ]]; then
-        log_error "Wallet address not configured"
-        return 1
-    fi
-
-    if [[ -z "$node_id" || "$node_id" == "null" || "$node_id" == "[]" ]]; then
-        log_error "No Node IDs configured"
-        return 1
-    fi
-
     # Create docker-compose header
     cat > "$DOCKER_COMPOSE_FILE" << 'EOF'
 version: '3.8'
@@ -258,15 +196,16 @@ EOF
 
     # Add each node as a service
     local service_count=0
-    echo "$node_id" | jq -r '.[]' | while IFS= read -r target_node_id; do
+    echo "$node_id" | jq -r '.[]' | while IFS= read -r node_entry; do
         service_count=$((service_count + 1))
+        local container_name="nexus-node-${node_entry}"
         local api_port=$((10000 + service_count - 1))  # Start from 10000
 
         cat >> "$DOCKER_COMPOSE_FILE" << EOF
 
-  nexus-node-${target_node_id}:
+  $container_name:
     image: nexusxyz/nexus-cli:latest
-    container_name: nexus-node-${target_node_id}
+    container_name: $container_name
     restart: unless-stopped
     networks:
       - nexus-network
@@ -277,17 +216,20 @@ EOF
       - NEXUS_HOME=/app/.nexus
       - NETWORK=testnet3
       - TZ=Asia/Jakarta
-      - NODE_ID=${target_node_id}
+      - NODE_ID=$node_id
     volumes:
-      - nexus_data_${target_node_id}:/app/.nexus
+      - nexus_data_${node_id}:/app/.nexus
       - $CREDENTIALS_FILE:/app/.nexus/credentials.json:ro
-    command: ["start", "--headless", "--node-id", "${target_node_id}"]
+    command: ["start", "--headless", "--node-id", "$node_id"]
     labels:
       - "nexus.network=true"
       - "nexus.service=prover"
-      - "nexus.node_id=${target_node_id}"
-    # Health check disabled for distroless container
-    # Container is healthy if it's running
+      - "nexus.node_id=$node_id"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 EOF
     done
 
@@ -298,9 +240,10 @@ volumes:
 EOF
 
     # Add volumes for each node
-    echo "$node_id" | jq -r '.[]' | while IFS= read -r target_node_id; do
+    echo "$node_id" | jq -r '.[]' | while IFS= read -r node_entry; do
         cat >> "$DOCKER_COMPOSE_FILE" << EOF
-  nexus_data_${target_node_id}:
+  nexus_data_${node_entry}:
+    driver: local
 EOF
     done
 
@@ -312,7 +255,6 @@ networks:
     driver: bridge
 EOF
 
-    log_success "✅ Generated docker-compose.yml with $(echo "$node_id" | jq -r '. | length') node(s)"
     return 0
 }
 

@@ -1,6 +1,12 @@
 #!/bin/bash
 
 # api_wrapper.sh - API Operations Wrapper
+# Version: 4.0.0 - Complex API operations for Nexus Orchestrator
+
+# shellcheck source=lib/common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"bash
+
+# api_wrapper.sh - API Interactions Wrapper
 # Version: 4.0.0 - Complex API operations for Nexus Orchestrator with retry logic
 
 # shellcheck source=../common.sh
@@ -13,7 +19,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 readonly API_WRAPPER_MAX_RETRIES=3
 readonly API_WRAPPER_RETRY_DELAY=5
 readonly API_WRAPPER_TIMEOUT=30
-readonly API_WRAPPER_USER_AGENT="nexus-cli"
+readonly API_WRAPPER_USER_AGENT="Nexus-Orchestrator/4.0"
 
 # Nexus API endpoints
 readonly NEXUS_API_BASE="https://api.nexus.xyz"

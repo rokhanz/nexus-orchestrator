@@ -17,6 +17,8 @@ readonly SCRIPT_DIR
 # Source core libraries
 # shellcheck source=lib/common.sh
 source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/progress.sh
+source "$SCRIPT_DIR/lib/progress.sh"
 # shellcheck source=lib/dependency_manager.sh
 source "$SCRIPT_DIR/lib/dependency_manager.sh"
 
@@ -31,13 +33,11 @@ show_help() {
     echo "  -h, --help              Show this help message"
     echo "  -v, --version           Show version information"
     echo "  --skip-deps             Skip dependency auto-installation"
-    echo "  --skip-permissions      Skip permission check"
     echo "  --health-check          Run health check only"
     echo "  --dev-mode              Enable development mode (detailed errors)"
     echo "Examples:"
     echo "  $0                      Start normal interactive mode"
     echo "  $0 --skip-deps          Start without dependency check"
-    echo "  $0 --skip-permissions   Start without permission check"
     echo "  $0 --health-check       Run system health check only"
     echo "  $0 --dev-mode           Enable development mode with detailed errors"
 }
@@ -49,9 +49,44 @@ show_version() {
     echo "Build: $(date '+%Y-%m-%d')"
 }
 
+# =============================================================================
+# PERMISSION MANAGEMENT
+# =============================================================================
+
+set_shell_script_permissions() {
+    log_activity "Setting executable permissions for all shell scripts"
+
+    local script_count=0
+    local error_count=0
+
+    # Find all .sh files in the project
+    while IFS= read -r -d '' script_file; do
+        if [[ -f "$script_file" ]]; then
+            if chmod +x "$script_file" 2>/dev/null; then
+                script_count=$((script_count + 1))
+                log_debug "Set executable permission: $script_file"
+            else
+                error_count=$((error_count + 1))
+                log_warning "Failed to set permission: $script_file"
+            fi
+        fi
+    done < <(find "$SCRIPT_DIR" -name "*.sh" -type f -print0)
+
+    if [[ $error_count -eq 0 ]]; then
+        log_success "Set executable permissions for $script_count shell scripts"
+        return 0
+    else
+        log_warning "Set permissions for $script_count scripts, $error_count failed"
+        return 1
+    fi
+}
+
+# =============================================================================
+# MAIN EXECUTION
+# =============================================================================
+
 main() {
     local skip_deps=false
-    local skip_permissions=false
     local health_only=false
 
     # Parse command line arguments
@@ -67,10 +102,6 @@ main() {
                 ;;
             --skip-deps)
                 skip_deps=true
-                shift
-                ;;
-            --skip-permissions)
-                skip_permissions=true
                 shift
                 ;;
             --health-check)
@@ -90,6 +121,9 @@ main() {
         esac
     done
 
+    # Show banner
+    show_banner
+
     # Handle special modes
     if [[ "$health_only" == true ]]; then
         echo -e "${CYAN}Running health check only...${NC}"
@@ -103,135 +137,40 @@ main() {
         fi
     fi
 
-    # Simple startup - check dependencies if not skipping
-    if [[ "$skip_deps" == false ]]; then
-        if ensure_dependencies "false"; then
-            echo ""
-            echo -e "${GREEN}${BOLD}✅ All dependencies are satisfied!${NC}"
-        else
-            echo ""
-            echo -e "${RED}${BOLD}❌ Some dependencies need attention${NC}"
-        fi
+    # Normal startup sequence with dependency management
+    log_activity "Starting Nexus Orchestrator v4.0.0"
+
+    if [[ "$skip_deps" != true ]]; then
+        echo -e "${CYAN}🔍 Checking and installing dependencies...${NC}"
         echo ""
+
+        if ! ensure_dependencies; then
+            echo ""
+            echo -e "${RED}❌ Dependency check failed${NC}"
+            echo -e "${YELLOW}💡 Please resolve dependency issues and restart${NC}"
+            echo ""
+            exit 1
+        fi
+
+        # Set executable permissions for all shell scripts
+        echo ""
+        set_shell_script_permissions
     fi
+
+    echo ""
+    log_success "System ready! Starting main menu..."
+    sleep 1
 
     # Load menu modules
     source "$SCRIPT_DIR/lib/menus/setup_menu.sh"
     source "$SCRIPT_DIR/lib/menus/manage_menu.sh"
-
-    # Check permissions before starting (unless skipped)
-    if [[ "$skip_permissions" == false ]]; then
-        check_permissions
-    else
-        echo -e "${YELLOW}⚠️  Permission check skipped${NC}"
-        echo ""
-    fi
 
     # Start main interactive menu
     show_main_menu
 }
 
 # =============================================================================
-# PERMISSION CHECK FUNCTIONS
-# =============================================================================
-
-check_permissions() {
-    echo -e "${CYAN}${BOLD}🔐 Permission Check${NC}"
-    echo -e "${CYAN}$(printf '%.0s─' {1..50})${NC}"
-    echo ""
-
-    local permission_ok=true
-
-    # Check if running as root or with sudo
-    if [[ $EUID -eq 0 ]]; then
-        echo -e "${GREEN}✅ Running with root privileges${NC}"
-    else
-        echo -e "${YELLOW}⚠️  Running as regular user: $(whoami)${NC}"
-
-        # Check if user has sudo access
-        if sudo -n true 2>/dev/null; then
-            echo -e "${GREEN}✅ User has sudo privileges${NC}"
-        else
-            echo -e "${RED}❌ User does not have sudo privileges${NC}"
-            echo -e "${YELLOW}💡 Some operations may require elevated permissions${NC}"
-            permission_ok=false
-        fi
-    fi
-
-    # Check Docker permissions
-    if command -v docker >/dev/null 2>&1; then
-        if docker ps >/dev/null 2>&1; then
-            echo -e "${GREEN}✅ Docker access available${NC}"
-        else
-            echo -e "${YELLOW}⚠️  Docker daemon access limited${NC}"
-            if [[ $EUID -ne 0 ]]; then
-                echo -e "${BLUE}💡 Consider adding user to docker group: sudo usermod -aG docker $(whoami)${NC}"
-            fi
-        fi
-    fi
-
-    # Check file system permissions for working directory
-    local workdir="${DEFAULT_WORKDIR:-/root/nexus-orchestrator/workdir}"
-    if [[ -w "$(dirname "$workdir")" ]] || [[ -w "$workdir" ]] 2>/dev/null; then
-        echo -e "${GREEN}✅ Working directory permissions OK${NC}"
-    else
-        echo -e "${YELLOW}⚠️  Limited write access to working directory${NC}"
-        echo -e "${BLUE}💡 Working directory: $workdir${NC}"
-    fi
-
-    # Check systemctl permissions (for Docker service management)
-    if systemctl status docker >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ System service management available${NC}"
-    else
-        if [[ $EUID -ne 0 ]]; then
-            echo -e "${YELLOW}⚠️  Limited system service management${NC}"
-        fi
-    fi
-
-    # Check UFW firewall permissions
-    if command -v ufw >/dev/null 2>&1; then
-        if ufw status >/dev/null 2>&1; then
-            echo -e "${GREEN}✅ UFW firewall management available${NC}"
-        else
-            echo -e "${YELLOW}⚠️  Limited UFW firewall access${NC}"
-            echo -e "${BLUE}💡 Port management features may require elevated permissions${NC}"
-        fi
-    fi
-
-    # Check network interface access (for proxy detection)
-    if ip addr show >/dev/null 2>&1 || ifconfig >/dev/null 2>&1; then
-        echo -e "${GREEN}✅ Network interface access available${NC}"
-    else
-        echo -e "${YELLOW}⚠️  Limited network interface access${NC}"
-        echo -e "${BLUE}💡 Proxy auto-detection may be limited${NC}"
-    fi
-
-    echo ""
-
-    if [[ "$permission_ok" == true ]] || [[ $EUID -eq 0 ]]; then
-        echo -e "${GREEN}${BOLD}✅ Permission check completed - Ready to proceed${NC}"
-    else
-        echo -e "${YELLOW}${BOLD}⚠️  Permission check completed with warnings${NC}"
-        echo -e "${CYAN}   Some features may require additional permissions${NC}"
-        echo ""
-
-        read -rp "$(echo -e "${YELLOW}Continue anyway? [y/N]: ${NC}")" continue_choice
-        if [[ ! "$continue_choice" =~ ^[Yy]$ ]]; then
-            echo ""
-            echo -e "${CYAN}💡 To resolve permission issues:${NC}"
-            echo -e "   1. Run as root: ${WHITE}sudo $0${NC}"
-            echo -e "   2. Add user to docker group: ${WHITE}sudo usermod -aG docker $(whoami)${NC}"
-            echo -e "   3. Logout and login again to apply group changes${NC}"
-            echo ""
-            exit 0
-        fi
-    fi
-
-    echo ""
-}
-
-# =============================================================================
-# MAIN MENU FUNCTIONS
+# MAIN MENU SYSTEM
 # =============================================================================
 
 show_main_menu() {
@@ -243,46 +182,105 @@ show_main_menu() {
         echo -e "${CYAN}════════════════════════════════════════════${NC}"
         echo ""
 
+        # Check if credentials are configured
+        local wallet_configured=false
+        local node_configured=false
+        local docker_configured=false
+
+        if [[ -f "$CREDENTIALS_FILE" ]]; then
+            local wallet_address
+            wallet_address=$(read_config_value "wallet_address" 2>/dev/null)
+            if [[ -n "$wallet_address" && "$wallet_address" != "null" ]]; then
+                wallet_configured=true
+            fi
+
+            # Check for node_id array
+            local node_count
+            node_count=$(read_config_value "node_id" 2>/dev/null | jq '. | length' 2>/dev/null || echo "0")
+            if [[ "$node_count" -gt 0 ]]; then
+                node_configured=true
+            fi
+        fi
+
+        # Check if Docker configuration exists
+        if [[ -f "$DOCKER_COMPOSE_FILE" ]]; then
+            docker_configured=true
+        fi
+        # Note: docker_configured is used below in menu option 2 validation
+
+        # Display status
+        echo -e "${PURPLE}${BOLD}📊 System Status:${NC}"
+        if [[ "$wallet_configured" == true ]]; then
+            echo -e "  ${GREEN}✅ Wallet Address:${NC} ${CYAN}Configured${NC}"
+        else
+            echo -e "  ${RED}❌ Wallet Address:${NC} ${YELLOW}Not configured${NC}"
+        fi
+
+        if [[ "$node_configured" == true ]]; then
+            local node_count
+            node_count=$(read_config_value "node_id" 2>/dev/null | jq '. | length' 2>/dev/null || echo "0")
+            echo -e "  ${GREEN}✅ Node ID:${NC} ${CYAN}$node_count node(s) configured${NC}"
+        else
+            echo -e "  ${RED}❌ Node ID:${NC} ${YELLOW}Not configured${NC}"
+        fi
+
+        if [[ "$docker_configured" == true ]]; then
+            echo -e "  ${GREEN}✅ Docker Config:${NC} ${CYAN}Generated${NC}"
+        else
+            echo -e "  ${RED}❌ Docker Config:${NC} ${YELLOW}Not generated${NC}"
+        fi
+        echo ""
+
         # Menu options
-        echo -e "${YELLOW}${BOLD}🎯 Available Options:${NC}"
+        echo -e "${YELLOW}${BOLD}📋 Available Options:${NC}"
         echo -e "  ${GREEN}1.${NC} ${CYAN}🔧 Initial Setup & Configuration${NC}"
         echo -e "  ${GREEN}2.${NC} ${CYAN}🎮 Nexus Management (Start/Stop/Monitor)${NC}"
-        echo -e "  ${GREEN}3.${NC} ${CYAN}🌐 Proxy Configuration${NC}"
-        echo -e "  ${GREEN}4.${NC} ${CYAN} View System Logs${NC}"
-        echo -e "  ${GREEN}5.${NC} ${CYAN}🗑️  System Uninstall & Cleanup${NC}"
-        echo -e "  ${GREEN}6.${NC} ${CYAN}❓ Help & Documentation${NC}"
+        echo -e "  ${GREEN}3.${NC} ${CYAN}📊 View System Logs${NC}"
+        echo -e "  ${GREEN}4.${NC} ${CYAN}🗑️  System Uninstall & Cleanup${NC}"
+        echo -e "  ${GREEN}5.${NC} ${CYAN}❓ Help & Documentation${NC}"
         echo -e "  ${GREEN}0.${NC} ${RED}🚪 Exit${NC}"
         echo ""
 
-        read -rp "$(echo -e "${PURPLE}${BOLD}Select option [0-6]:${NC} ")" choice
+        read -rp "$(echo -e "${PURPLE}${BOLD}Select option [0-5]:${NC} ")" choice
 
         case "$choice" in
             1)
                 clear
-                source "$SCRIPT_DIR/lib/menus/setup_menu.sh"
                 setup_menu
                 ;;
             2)
-                clear
-                source "$SCRIPT_DIR/lib/menus/manage_menu.sh"
-                manage_menu
+                if [[ "$wallet_configured" == false || "$node_configured" == false || "$docker_configured" == false ]]; then
+                    echo ""
+                    echo -e "${RED}${BOLD}❌ Please complete setup first (option 1)${NC}"
+                    if [[ "$wallet_configured" == false ]]; then
+                        echo -e "${YELLOW}   • Configure wallet address${NC}"
+                    fi
+                    if [[ "$node_configured" == false ]]; then
+                        echo -e "${YELLOW}   • Setup Node ID(s)${NC}"
+                    fi
+                    if [[ "$docker_configured" == false ]]; then
+                        echo -e "${YELLOW}   • Generate Docker configuration${NC}"
+                    fi
+                    echo ""
+                    read -rp "$(echo -e "${YELLOW}Press Enter to continue...${NC}")"
+                else
+                    clear
+                    source "$SCRIPT_DIR/lib/menus/manage_menu.sh"
+                    manage_menu
+                fi
                 ;;
             3)
                 clear
-                source "$SCRIPT_DIR/lib/menus/proxy_menu.sh"
-                proxy_menu
+                source "$SCRIPT_DIR/lib/logging.sh"
+                view_logs_interactive
                 ;;
             4)
-                clear
-                source "$SCRIPT_DIR/lib/menus/manage_menu.sh"
-                view_node_logs
-                ;;
-            5)
                 clear
                 source "$SCRIPT_DIR/lib/menus/uninstall_menu.sh"
                 uninstall_menu
                 ;;
-            6)
+            5)
+                clear
                 show_help_menu
                 ;;
             0)
@@ -292,7 +290,7 @@ show_main_menu() {
                 exit 0
                 ;;
             *)
-                echo -e "${RED}❌ Invalid option. Please select 0-7.${NC}"
+                echo -e "${RED}❌ Invalid option. Please select 0-5.${NC}"
                 sleep 2
                 ;;
         esac
@@ -319,7 +317,7 @@ show_help_menu() {
     echo "  • Management menu provides additional configuration options"
     echo ""
     echo -e "${YELLOW}Troubleshooting:${NC}"
-    echo "  • Check logs (Option 5) for detailed error information"
+    echo "  • Check logs (Option 4) for detailed error information"
     echo "  • Use --health-check flag for system diagnostics"
     echo "  • Use --skip-deps flag to bypass dependency checks"
     echo ""
@@ -328,8 +326,11 @@ show_help_menu() {
 }
 
 # =============================================================================
-# MAIN EXECUTION
+# FUNCTION EXPORTS
 # =============================================================================
+
+# Export functions
+export -f show_main_menu show_help_menu
 
 # Execute main function with all arguments
 main "$@"

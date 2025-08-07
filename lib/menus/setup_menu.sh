@@ -5,8 +5,6 @@
 
 # shellcheck source=../common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
-# shellcheck source=../wrappers/api_wrapper.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../wrappers/api_wrapper.sh" 2>/dev/null || true
 
 # =============================================================================
 # SETUP MENU MAIN FUNCTION
@@ -20,17 +18,18 @@ setup_menu() {
         show_section_header "Setup & Installation" "🚀"
 
         echo -e "  ${GREEN}1.${NC} 🔧 ${CYAN}Setup Nexus Docker${NC}         ${YELLOW}(Pull Docker image for containerized nodes)${NC}"
-        echo -e "  ${GREEN}2.${NC} 💳 ${CYAN}Configure Wallet Address${NC}      ${YELLOW}(Set Ethereum wallet for NEX rewards)${NC}"
+        echo -e "  ${GREEN}2.${NC} 💳 ${CYAN}Configure Wallet Address${NC}    ${YELLOW}(Set wallet address for rewards)${NC}"
         echo -e "  ${GREEN}3.${NC} 🆔 ${CYAN}Setup Node ID${NC}               ${YELLOW}(Configure node identities)${NC}"
-        echo -e "  ${GREEN}4.${NC} 📊 ${CYAN}Wallet Information${NC}          ${YELLOW}(View complete wallet & network status)${NC}"
-        echo -e "  ${GREEN}5.${NC} ✅ ${CYAN}Verify Installation${NC}         ${YELLOW}(Test all components)${NC}"
+        echo -e "  ${GREEN}4.${NC} 🐳 ${CYAN}Generate Docker Config${NC}      ${YELLOW}(Create docker-compose.yml)${NC}"
+        echo -e "  ${GREEN}5.${NC} 🌐 ${CYAN}Network Configuration${NC}       ${YELLOW}(Ports and connectivity)${NC}"
+        echo -e "  ${GREEN}6.${NC} ✅ ${CYAN}Verify Installation${NC}         ${YELLOW}(Test all components)${NC}"
         echo ""
         echo -e "  ${GREEN}0.${NC} ⬅️  ${CYAN}Back to Main Menu${NC}           ${YELLOW}(Return to main menu)${NC}"
         echo ""
         echo -e "${CYAN}══════════════════════════════════════════════════════════════════════${NC}"
         echo ""
 
-        read -rp "$(echo -e "${BOLD}${PURPLE}Please select an option [0-5]:${NC} ")" choice
+        read -rp "$(echo -e "${BOLD}${PURPLE}Please select an option [0-6]:${NC} ")" choice
         echo ""
 
         case "$choice" in
@@ -44,12 +43,12 @@ setup_menu() {
                 setup_node_ids_interactive
                 ;;
             4)
-                echo -e "${CYAN}📊 Loading Wallet Information...${NC}"
-                echo ""
-                # Complete wallet information display
-                show_wallet_information
+                generate_docker_config
                 ;;
             5)
+                configure_network_settings
+                ;;
+            6)
                 verify_installation
                 ;;
             0)
@@ -181,146 +180,14 @@ configure_wallet_interactive() {
         return
     fi
 
-    # Show confirmation before saving
-    echo ""
-    echo -e "${CYAN}📋 ${BOLD}Wallet Address Confirmation${NC}"
-    echo -e "${CYAN}Address to save: ${YELLOW}$wallet_address${NC}"
-    echo ""
-    read -rp "$(echo -e "${PURPLE}${BOLD}Save this wallet address? [y/N]:${NC} ")" confirm
-
-    case "${confirm,,}" in
-        y|yes)
-            # Save to configuration
-            if write_config_value "wallet_address" "$wallet_address"; then
-                echo -e "${GREEN}✅ Wallet address configured successfully!${NC}"
-                echo -e "${CYAN}   Address: ${YELLOW}$wallet_address${NC}"
-            else
-                echo -e "${RED}❌ Failed to save wallet address!${NC}"
-            fi
-            ;;
-        *)
-            echo -e "${YELLOW}⏭️  Wallet address configuration cancelled.${NC}"
-            ;;
-    esac
-
-    echo ""
-    echo -e "${YELLOW}Press any key to continue...${NC}"
-    read -rn 1
-}
-
-# =============================================================================
-# WALLET INFORMATION DISPLAY
-# =============================================================================
-
-show_wallet_information() {
-    clear
-    show_section_header "Wallet Information" "📊"
-
-    echo -e "${CYAN}📊 ${BOLD}Complete Wallet & Network Information${NC}"
-    echo ""
-
-    # Show current wallet if exists
-    local current_wallet
-    current_wallet=$(read_config_value "wallet_address")
-    if [[ -n "$current_wallet" && "$current_wallet" != "null" ]]; then
-        echo -e "${CYAN}${BOLD}📍 Current Wallet:${NC} ${YELLOW}$current_wallet${NC}"
-        echo ""
-
-        # Auto-detect and display NEX rewards information
-        echo -e "${YELLOW}${BOLD}💰 NEX Rewards Information:${NC}"
-        if command -v check_nex_rewards >/dev/null 2>&1; then
-            # Check network connectivity first
-            if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
-                echo -e "  ${CYAN}🔄 Auto-detecting rewards...${NC}"
-                if check_nex_rewards "$current_wallet" 2>/dev/null; then
-                    echo -e "  ${GREEN}✅ Rewards data auto-loaded${NC}"
-                else
-                    echo -e "  ${YELLOW}⚠️  No rewards data (wallet may not be active)${NC}"
-                fi
-            else
-                echo -e "  ${RED}❌ Network offline - Cannot auto-detect rewards${NC}"
-            fi
-        else
-            echo -e "  ${YELLOW}⚠️  NEX rewards API not available${NC}"
-        fi
-        echo ""
-
-        # Auto-detect network status
-        echo -e "${YELLOW}${BOLD}🌐 Network & API Auto-Detection:${NC}"
-        echo -e "  ${CYAN}🔄 Auto-checking connectivity...${NC}"
-        if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
-            echo -e "  ${GREEN}✅ Internet: Connected${NC}"
-
-            # Test API connectivity automatically
-            if command -v test_api_connectivity >/dev/null 2>&1; then
-                if test_api_connectivity >/dev/null 2>&1; then
-                    echo -e "  ${GREEN}✅ Nexus API: Auto-detected & Connected${NC}"
-
-                    # Check network status
-                    if command -v check_nexus_network_status >/dev/null 2>&1; then
-                        if check_nexus_network_status >/dev/null 2>&1; then
-                            echo -e "  ${GREEN}✅ Nexus Network: Online & Operational${NC}"
-                        else
-                            echo -e "  ${YELLOW}⚠️  Nexus Network: Under Maintenance${NC}"
-                        fi
-                    fi
-
-                    # Get API version
-                    if command -v get_api_version >/dev/null 2>&1; then
-                        local api_version
-                        api_version=$(get_api_version 2>/dev/null)
-                        if [[ "$api_version" != "unknown" && -n "$api_version" ]]; then
-                            echo -e "  ${GREEN}✅ API Version: ${CYAN}$api_version${NC} (Auto-detected)"
-                        fi
-                    fi
-                else
-                    echo -e "  ${RED}❌ Nexus API: Auto-detection failed${NC}"
-                fi
-            else
-                echo -e "  ${YELLOW}⚠️  API connectivity test not available${NC}"
-            fi
-        else
-            echo -e "  ${RED}❌ Internet connection: Disconnected${NC}"
-        fi
-        echo ""
-
-        # Wallet validation status
-        if validate_wallet_address "$current_wallet" 2>/dev/null; then
-            echo -e "  ${GREEN}✅ Wallet format: Valid${NC}"
-        else
-            echo -e "  ${RED}❌ Wallet format: Invalid${NC}"
-        fi
-        echo ""
-
-        # Auto-detect and display Node Information
-        echo -e "${YELLOW}${BOLD}🆔 Node Information:${NC}"
-        local current_node_id
-        current_node_id=$(read_config_value "node_id" 2>/dev/null)
-        if [[ -n "$current_node_id" && "$current_node_id" != "null" ]]; then
-            local node_count
-            node_count=$(echo "$current_node_id" | jq -r 'length' 2>/dev/null || echo "1")
-            echo -e "  ${GREEN}✅ Node IDs configured: ${CYAN}$node_count node(s)${NC}"
-
-            # Show first few node IDs
-            if command -v jq >/dev/null 2>&1; then
-                echo "$current_node_id" | jq -r '.[]' 2>/dev/null | head -3 | while read -r node_id; do
-                    echo -e "    ${GREEN}•${NC} ${YELLOW}$node_id${NC}"
-                done
-                if [[ "$node_count" -gt 3 ]]; then
-                    echo -e "    ${CYAN}... and $((node_count - 3)) more${NC}"
-                fi
-            else
-                echo -e "    ${GREEN}•${NC} ${YELLOW}$current_node_id${NC}"
-            fi
-        else
-            echo -e "  ${RED}❌ No Node IDs configured${NC}"
-        fi
+    # Save to configuration
+    if write_config_value "wallet_address" "$wallet_address"; then
+        echo -e "${GREEN}✅ Wallet address configured successfully!${NC}"
+        echo -e "${CYAN}   Address: ${YELLOW}$wallet_address${NC}"
     else
-        echo -e "${YELLOW}⚠️  No wallet configured${NC}"
-        echo -e "${CYAN}   Use option 2 to configure your wallet address first.${NC}"
+        echo -e "${RED}❌ Failed to save wallet address!${NC}"
     fi
-    echo ""
-    echo -e "${CYAN}══════════════════════════════════════════════════════════════════════${NC}"
+
     echo ""
     echo -e "${YELLOW}Press any key to continue...${NC}"
     read -rn 1
@@ -391,10 +258,6 @@ setup_node_ids_interactive() {
 add_node_id_interactive() {
     echo -e "${CYAN}📝 ${BOLD}Add New Node ID${NC}"
     echo ""
-    echo -e "${YELLOW}💡 Node ID must be numeric only (numbers 0-9)${NC}"
-    echo -e "${YELLOW}   Length: 1-20 digits${NC}"
-    echo -e "${YELLOW}   Example: 123456789${NC}"
-    echo ""
 
     read -rp "$(echo -e "${BOLD}${PURPLE}Enter new Node ID:${NC} ")" new_node_id
     echo ""
@@ -406,8 +269,7 @@ add_node_id_interactive() {
 
     if ! validate_node_id "$new_node_id"; then
         echo -e "${RED}❌ Invalid Node ID format!${NC}"
-        echo -e "${YELLOW}   Node ID must contain only numbers (1-20 digits)${NC}"
-        echo -e "${YELLOW}   Example: 123456789${NC}"
+        echo -e "${YELLOW}   Node ID must contain only letters, numbers, hyphens, and underscores${NC}"
         return
     fi
 
@@ -473,10 +335,6 @@ edit_node_id_interactive() {
 
     echo -e "${CYAN}Selected Node ID: ${YELLOW}$old_node_id${NC}"
     echo ""
-    echo -e "${YELLOW}💡 Node ID must be numeric only (numbers 0-9)${NC}"
-    echo -e "${YELLOW}   Length: 1-20 digits${NC}"
-    echo -e "${YELLOW}   Example: 123456789${NC}"
-    echo ""
 
     read -rp "$(echo -e "${BOLD}${PURPLE}Enter new Node ID:${NC} ")" new_node_id
     echo ""
@@ -488,8 +346,6 @@ edit_node_id_interactive() {
 
     if ! validate_node_id "$new_node_id"; then
         echo -e "${RED}❌ Invalid Node ID format!${NC}"
-        echo -e "${YELLOW}   Node ID must contain only numbers (1-20 digits)${NC}"
-        echo -e "${YELLOW}   Example: 123456789${NC}"
         return
     fi
 
@@ -594,8 +450,109 @@ list_node_ids_interactive() {
             ((i++))
         done
         echo ""
-        echo -e "${CYAN}Total: ${YELLOW}$(echo "$node_id" | wc -l)${NC} Node ID(s)"
+        echo -e "${CYAN}Total: ${YELLOW}$(echo "$node_ids" | wc -l)${NC} Node ID(s)"
     fi
+}
+
+# =============================================================================
+# GENERATE DOCKER CONFIG
+# =============================================================================
+
+generate_docker_config() {
+    clear
+    show_section_header "Generate Docker Configuration" "🐳"
+
+    echo -e "${CYAN}🐳 ${BOLD}Docker Compose Configuration Generator${NC}"
+    echo ""
+    echo -e "${YELLOW}This will create a docker-compose.yml file based on your Node IDs.${NC}"
+    echo -e "${YELLOW}Each Node ID will get its own service with unique ports.${NC}"
+    echo ""
+
+    # Check if we have node IDs configured
+    local node_ids
+    node_ids=$(list_node_ids)
+    if [[ -z "$node_ids" ]]; then
+        echo -e "${RED}❌ No Node IDs configured!${NC}"
+        echo -e "${YELLOW}   Please configure Node IDs first in the Setup menu.${NC}"
+        echo ""
+        echo -e "${YELLOW}Press any key to continue...${NC}"
+        read -rn 1
+        return
+    fi
+
+    echo -e "${CYAN}Configured Node IDs:${NC}"
+    echo "$node_ids" | while read -r node_id; do
+        echo -e "  ${GREEN}•${NC} ${YELLOW}$node_id${NC}"
+    done
+    echo ""
+
+    read -rp "$(echo -e "${BOLD}${PURPLE}Generate docker-compose.yml? [y/n]:${NC} ")" confirm
+    echo ""
+
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}🔧 ${BOLD}Generating Docker configuration...${NC}"
+        echo ""
+
+        if create_smart_docker_compose; then
+            echo -e "${GREEN}✅ Docker configuration generated successfully!${NC}"
+            echo -e "${CYAN}   File: ${YELLOW}$(pwd)/docker-compose.yml${NC}"
+            echo ""
+
+            # Show the generated file content summary
+            local service_count
+            service_count=$(echo "$node_ids" | wc -l)
+            echo -e "${CYAN}Generated ${YELLOW}$service_count${CYAN} service(s) for your Node IDs.${NC}"
+        else
+            echo -e "${RED}❌ Failed to generate Docker configuration!${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⏭️  Docker configuration generation cancelled.${NC}"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}Press any key to continue...${NC}"
+    read -rn 1
+}
+
+# =============================================================================
+# NETWORK CONFIGURATION
+# =============================================================================
+
+configure_network_settings() {
+    clear
+    show_section_header "Network Configuration" "🌐"
+
+    echo -e "${CYAN}🌐 ${BOLD}Network Settings Configuration${NC}"
+    echo ""
+    echo -e "${YELLOW}Configure network settings for your Nexus nodes.${NC}"
+    echo ""
+
+    echo -e "${GREEN}1.${NC} 🔌 ${CYAN}Configure Port Range${NC}"
+    echo -e "${GREEN}2.${NC} 🔧 ${CYAN}Set Custom Ports${NC}"
+    echo -e "${GREEN}3.${NC} 🌍 ${CYAN}Network Interfaces${NC}"
+    echo -e "${GREEN}4.${NC} 🔒 ${CYAN}Firewall Settings${NC}"
+    echo -e "${GREEN}0.${NC} ⬅️  ${CYAN}Back to Setup Menu${NC}"
+    echo ""
+
+    read -rp "$(echo -e "${BOLD}${PURPLE}Select option [0-4]:${NC} ")" choice
+    echo ""
+
+    case "$choice" in
+        1|2|3|4)
+            echo -e "${YELLOW}⚠️  This feature is under development.${NC}"
+            echo -e "${CYAN}   Network settings will be configurable in a future version.${NC}"
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo -e "${RED}❌ Invalid option.${NC}"
+            ;;
+    esac
+
+    echo ""
+    echo -e "${YELLOW}Press any key to continue...${NC}"
+    read -rn 1
 }
 
 # =============================================================================
@@ -670,8 +627,7 @@ verify_installation() {
     if [[ -f "docker-compose.yml" ]]; then
         echo -e "   ${GREEN}✅ Docker compose file exists${NC}"
     else
-        echo -e "   ${CYAN}ℹ️  Docker compose will auto-generate when starting containers${NC}"
-        echo -e "   ${GRAY}   No manual generation needed${NC}"
+        echo -e "   ${YELLOW}⚠️  Docker compose file not generated${NC}"
     fi
 
     # Check Docker availability
@@ -694,10 +650,6 @@ verify_installation() {
     if $all_good; then
         echo -e "${GREEN}🎉 ${BOLD}All core components are properly configured!${NC}"
         echo -e "${CYAN}   Your Nexus Orchestrator is ready to use.${NC}"
-        echo ""
-        echo -e "${BLUE}💡 ${BOLD}Next Steps:${NC}"
-        echo -e "   ${CYAN}• Use 'Nexus Management' to start your nodes${NC}"
-        echo -e "   ${CYAN}• Docker config will auto-generate when needed${NC}"
     else
         echo -e "${YELLOW}⚠️  ${BOLD}Some components need attention.${NC}"
         echo -e "${CYAN}   Please complete the missing configurations above.${NC}"
@@ -707,4 +659,3 @@ verify_installation() {
     echo -e "${YELLOW}Press any key to continue...${NC}"
     read -rn 1
 }
-

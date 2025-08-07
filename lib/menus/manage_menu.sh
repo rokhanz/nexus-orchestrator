@@ -5,14 +5,6 @@
 
 # shellcheck source=lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
-# shellcheck source=lib/progress.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../progress.sh"
-# shellcheck source=lib/wrappers/docker_wrapper.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../wrappers/docker_wrapper.sh"
-# shellcheck source=lib/port_manager.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../port_manager.sh"
-# shellcheck source=lib/docker_memory_optimizer.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../docker_memory_optimizer.sh"
 
 # =============================================================================
 # MANAGEMENT MENU FUNCTIONS
@@ -40,15 +32,13 @@ manage_menu() {
         echo -e "  ${GREEN}6.${NC} 🔧 Individual Node Control     ${CYAN}(Manage specific nodes)${NC}"
         echo -e "  ${GREEN}7.${NC} 📈 Performance Metrics         ${CYAN}(View performance stats)${NC}"
         echo -e "  ${GREEN}8.${NC} 🔄 Update Nodes                ${CYAN}(Update to latest version)${NC}"
-        echo -e "  ${GREEN}9.${NC} 🔥 Port Management             ${CYAN}(UFW firewall configuration)${NC}"
-        echo -e "  ${GREEN}C.${NC} 🧹 Cache Cleanup               ${CYAN}(Memory optimization & cleanup)${NC}"
         echo ""
         echo -e "  ${GREEN}0.${NC} ↩️  Back to Main Menu           ${CYAN}(Return to main menu)${NC}"
         echo ""
         echo -e "${CYAN}══════════════════════════════════════════════════════════════════════${NC}"
         echo ""
 
-        read -rp "$(echo -e "${BOLD}Please select an option [0-9/C]:${NC} ")" choice
+        read -rp "$(echo -e "${BOLD}Please select an option [0-8]:${NC} ")" choice
         echo ""
 
         case "$choice" in
@@ -76,18 +66,12 @@ manage_menu() {
             8)
                 update_nodes
                 ;;
-            9)
-                port_management_menu
-                ;;
-            [Cc])
-                cache_cleanup_menu
-                ;;
             0)
                 log_activity "Returning to main menu from node management"
                 return 0
                 ;;
             *)
-                echo -e "${RED}❌ Invalid option. Please select 0-9 or C.${NC}"
+                echo -e "${RED}❌ Invalid option. Please select 0-8.${NC}"
                 sleep 2
                 ;;
         esac
@@ -171,16 +155,39 @@ start_all_nodes() {
         return 1
     fi
 
-    echo -e "${CYAN}Starting all Nexus prover nodes with enhanced port management...${NC}"
+    echo -e "${CYAN}Starting all Nexus prover nodes...${NC}"
     echo ""
 
-    # Use enhanced start with auto port management
-    if enhanced_start_containers; then
+    init_multi_step 3
+
+    next_step "Validating configuration"
+    if ! docker-compose -f "$DOCKER_COMPOSE_FILE" config >/dev/null 2>&1; then
+        handle_error "Invalid Docker Compose configuration"
+        return 1
+    fi
+
+    next_step "Starting containers"
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" up -d --remove-orphans; then
+        log_success "All containers started successfully"
+    else
+        handle_error "Failed to start some containers"
+        return 1
+    fi
+
+    next_step "Verifying startup"
+    sleep 5
+
+    # Check if containers are running
+    local running_count
+    running_count=$(docker ps --filter "name=nexus-node" --format "{{.Names}}" | wc -l)
+
+    if [[ $running_count -gt 0 ]]; then
+        complete_multi_step
         echo ""
-        echo -e "${GREEN}✅ Enhanced startup completed successfully!${NC}"
+        echo -e "${GREEN}✅ $running_count node(s) started successfully${NC}"
         show_running_containers
     else
-        handle_error "Enhanced startup failed"
+        handle_error "No containers are running after startup"
         return 1
     fi
 
@@ -190,7 +197,7 @@ start_all_nodes() {
 stop_all_nodes() {
     show_section_header "Stop All Nodes" "⏹️"
 
-    echo -e "${CYAN}Stopping all Nexus prover nodes with enhanced port management...${NC}"
+    echo -e "${CYAN}Stopping all Nexus prover nodes...${NC}"
     echo ""
 
     # Check if any containers are running
@@ -212,12 +219,27 @@ stop_all_nodes() {
         return 0
     fi
 
-    # Use enhanced stop with port management options
-    if enhanced_stop_containers; then
-        echo ""
-        echo -e "${GREEN}✅ Enhanced shutdown completed successfully!${NC}"
+    init_multi_step 2
+
+    next_step "Gracefully stopping containers"
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" down; then
+        log_success "All containers stopped successfully"
     else
-        log_warning "Enhanced shutdown encountered issues"
+        log_warning "Some containers may not have stopped gracefully"
+    fi
+
+    next_step "Verifying shutdown"
+    sleep 2
+
+    local remaining_count
+    remaining_count=$(docker ps --filter "name=nexus-node" --format "{{.Names}}" | wc -l)
+
+    if [[ $remaining_count -eq 0 ]]; then
+        complete_multi_step
+        echo ""
+        echo -e "${GREEN}✅ All nodes stopped successfully${NC}"
+    else
+        log_warning "$remaining_count containers still running"
     fi
 
     read -rp "Press Enter to continue..."
@@ -371,17 +393,9 @@ view_node_logs() {
         echo ""
 
         sleep 2
-        # Handle Ctrl+C gracefully
-        docker logs -f --tail 50 "$selected_service" 2>/dev/null
-        local exit_code=$?
-
-        # Handle Ctrl+C (130) and normal exit codes
-        if [[ $exit_code -eq 130 ]]; then
-            echo ""
-            echo -e "${YELLOW}📊 Log monitoring stopped${NC}"
-        elif [[ $exit_code -ne 0 ]]; then
+        docker logs -f --tail 50 "$selected_service" 2>/dev/null || {
             echo -e "${RED}❌ Failed to get logs for $selected_service${NC}"
-        fi
+        }
     else
         echo -e "${RED}❌ Invalid selection${NC}"
         sleep 2
@@ -467,8 +481,7 @@ control_single_node() {
             echo -e "  ${GREEN}4.${NC} 📊 Show Details               ${CYAN}(Detailed information)${NC}"
         else
             echo -e "  ${GREEN}1.${NC} 🚀 Start Node                 ${CYAN}(Start this node)${NC}"
-            echo -e "  ${GREEN}2.${NC} 📋 View Logs                  ${CYAN}(Show recent logs)${NC}"
-            echo -e "  ${GREEN}3.${NC} 📊 Show Details               ${CYAN}(Detailed information)${NC}"
+            echo -e "  ${GREEN}4.${NC} 📊 Show Details               ${CYAN}(Detailed information)${NC}"
         fi
 
         echo ""
@@ -492,22 +505,8 @@ control_single_node() {
                 if [[ "$status" =~ ^Up ]]; then
                     restart_single_node "$service"
                 else
-                    # For stopped nodes: option 2 is View Logs
-                    echo -e "${CYAN}Showing logs for: ${BOLD}$service${NC}"
-                    echo -e "${YELLOW}Press Ctrl+C to exit log view${NC}"
-                    echo ""
+                    echo -e "${RED}❌ Node is not running${NC}"
                     sleep 2
-                    # Handle Ctrl+C gracefully
-                    docker logs -f --tail 50 "$service" 2>/dev/null
-                    local exit_code=$?
-
-                    # Handle Ctrl+C (130) and normal exit codes
-                    if [[ $exit_code -eq 130 ]]; then
-                        echo ""
-                        echo -e "${YELLOW}📊 Log monitoring stopped${NC}"
-                    elif [[ $exit_code -ne 0 ]]; then
-                        echo -e "${RED}❌ Failed to get logs for $service${NC}"
-                    fi
                 fi
                 ;;
             3)
@@ -516,30 +515,14 @@ control_single_node() {
                     echo -e "${YELLOW}Press Ctrl+C to exit log view${NC}"
                     echo ""
                     sleep 2
-                    # Handle Ctrl+C gracefully
                     docker logs -f --tail 50 "$service" 2>/dev/null
-                    local exit_code=$?
-
-                    # Handle Ctrl+C (130) and normal exit codes
-                    if [[ $exit_code -eq 130 ]]; then
-                        echo ""
-                        echo -e "${YELLOW}📊 Log monitoring stopped${NC}"
-                    elif [[ $exit_code -ne 0 ]]; then
-                        echo -e "${RED}❌ Failed to get logs for $service${NC}"
-                    fi
                 else
-                    # For stopped nodes: option 3 is Show Details
-                    show_single_node_details "$service"
+                    echo -e "${RED}❌ Node is not running${NC}"
+                    sleep 2
                 fi
                 ;;
             4)
-                # For running nodes: option 4 is Show Details
-                if [[ "$status" =~ ^Up ]]; then
-                    show_single_node_details "$service"
-                else
-                    echo -e "${RED}❌ Invalid option for stopped node${NC}"
-                    sleep 2
-                fi
+                show_single_node_details "$service"
                 ;;
             0)
                 return 0
@@ -568,24 +551,11 @@ start_single_node() {
 stop_single_node() {
     local service="$1"
     echo -e "${CYAN}Stopping node: ${BOLD}$service${NC}"
-    echo ""
 
-    # Check if service exists
-    if ! docker ps -a --filter "name=$service" --format "{{.Names}}" | grep -q "^$service$"; then
-        echo -e "${YELLOW}⚠️  Container $service not found${NC}"
-        read -rp "Press Enter to continue..."
-        return 0
-    fi
-
-    if docker-compose -f "$DOCKER_COMPOSE_FILE" stop "$service" 2>/dev/null; then
+    if docker-compose -f "$DOCKER_COMPOSE_FILE" stop "$service"; then
         log_success "Node $service stopped successfully"
     else
-        echo -e "${YELLOW}⚠️  Docker compose stop failed, trying direct stop...${NC}"
-        if docker stop "$service" 2>/dev/null; then
-            log_success "Node $service stopped directly"
-        else
-            handle_error "Failed to stop node $service"
-        fi
+        handle_error "Failed to stop node $service"
     fi
 
     read -rp "Press Enter to continue..."
@@ -710,33 +680,10 @@ update_nodes() {
 # HELPER FUNCTIONS
 # =============================================================================
 
-check_credentials() {
-    # Check if wallet address is configured
-    local wallet_address
-    wallet_address=$(read_config_value "wallet_address" 2>/dev/null)
-
-    if [[ -z "$wallet_address" || "$wallet_address" == "null" ]]; then
-        return 1
-    fi
-
-    # Check if node IDs are configured
-    local node_ids
-    node_ids=$(read_config_value "node_id" 2>/dev/null)
-    local node_count
-    node_count=$(echo "$node_ids" | jq '. | length' 2>/dev/null || echo "0")
-
-    if [[ "$node_count" -eq 0 ]]; then
-        return 1
-    fi
-
-    return 0
-}
-
 check_prerequisites() {
-    # Force regenerate docker-compose to sync with current Node IDs
-    if ! ensure_docker_compose_exists "true"; then
-        echo -e "${RED}❌ Failed to sync Docker configuration with current Node IDs${NC}"
-        echo -e "${YELLOW}💡 Please check your Node ID configuration${NC}"
+    if [[ ! -f "$DOCKER_COMPOSE_FILE" ]]; then
+        echo -e "${RED}❌ Docker Compose configuration not found${NC}"
+        echo -e "${YELLOW}💡 Please run setup first${NC}"
         read -rp "Press Enter to continue..."
         return 1
     fi
@@ -760,68 +707,6 @@ show_running_containers() {
 }
 
 # =============================================================================
-# PORT MANAGEMENT MENU
-# =============================================================================
-
-port_management_menu() {
-    while true; do
-        clear
-        show_section_header "Port Management" "🔥"
-
-        echo -e "${CYAN}Current UFW Firewall Status:${NC}"
-        show_port_status
-        echo ""
-
-        echo -e "${CYAN}${BOLD}📋 PORT MANAGEMENT OPTIONS${NC}"
-        echo -e "${CYAN}══════════════════════════════════════════════════════════════════════${NC}"
-        echo ""
-        echo -e "  ${GREEN}1.${NC} 🔥 Open All Ports              ${CYAN}(Auto-open ports from docker-compose)${NC}"
-        echo -e "  ${GREEN}2.${NC} 🔒 Close All Ports             ${CYAN}(Close Nexus-related ports)${NC}"
-        echo -e "  ${GREEN}3.${NC} 📊 Show Port Status            ${CYAN}(Detailed port information)${NC}"
-        echo -e "  ${GREEN}4.${NC} 🔍 Validate Ports              ${CYAN}(Check port availability)${NC}"
-        echo -e "  ${GREEN}5.${NC} 💾 Backup UFW Rules            ${CYAN}(Save current firewall config)${NC}"
-        echo ""
-        echo -e "  ${GREEN}0.${NC} ↩️  Back to Management Menu     ${CYAN}(Return to previous menu)${NC}"
-        echo ""
-        echo -e "${CYAN}══════════════════════════════════════════════════════════════════════${NC}"
-        echo ""
-
-        read -rp "$(echo -e "${BOLD}Please select an option [0-5]:${NC} ")" choice
-        echo ""
-
-        case "$choice" in
-            1)
-                auto_open_ports
-                read -rp "Press Enter to continue..."
-                ;;
-            2)
-                auto_close_ports
-                read -rp "Press Enter to continue..."
-                ;;
-            3)
-                show_port_status
-                read -rp "Press Enter to continue..."
-                ;;
-            4)
-                validate_ports
-                read -rp "Press Enter to continue..."
-                ;;
-            5)
-                backup_ufw_rules
-                read -rp "Press Enter to continue..."
-                ;;
-            0)
-                return 0
-                ;;
-            *)
-                echo -e "${RED}❌ Invalid option. Please select 0-5.${NC}"
-                sleep 2
-                ;;
-        esac
-    done
-}
-
-# =============================================================================
 # EXPORT FUNCTIONS
 # =============================================================================
 
@@ -829,7 +714,6 @@ export -f manage_menu show_node_status start_all_nodes stop_all_nodes restart_al
 export -f show_detailed_node_status view_node_logs individual_node_control
 export -f control_single_node start_single_node stop_single_node restart_single_node
 export -f show_single_node_details show_performance_metrics update_nodes
-export -f port_management_menu show_running_containers
 export -f check_prerequisites show_running_containers
 
 log_success "Node management menu module loaded successfully"

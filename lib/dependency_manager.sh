@@ -1,17 +1,10 @@
 #!/bin/bash
 
-# dependency_manager.sh - Dependency management for Nexus Orchestrator
-# Version: 4.0.0 - Intelligent dependency resolution and installation
-
-# Source guard to prevent multiple inclusions
-if [[ -n "${DEPENDENCY_MANAGER_SH_LOADED:-}" ]]; then
-    return 0
-fi
-readonly DEPENDENCY_MANAGER_SH_LOADED=1
+# dependency_manager.sh - Auto-dependency installation system
+# Version: 4.0.0 - Smart dependency management for Nexus Orchestrator
 
 # shellcheck source=lib/common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
-
 # shellcheck source=lib/progress.sh
 source "$(dirname "${BASH_SOURCE[0]}")/progress.sh"
 
@@ -265,8 +258,7 @@ auto_install_dependencies() {
                     echo -e "${BLUE}Installing dependency $current_dep/$total_deps${NC}"
 
                     if install_package "$dep"; then
-                        local percentage=$(( (current_dep * 100) / total_deps ))
-                        show_unified_progress "Installing ${dep%%:*}" "$percentage" "install"
+                        show_progress "$current_dep" "$total_deps" "Dependency Installation"
                     else
                         handle_error "Failed to install critical dependency: ${dep%%:*}"
                         return 1
