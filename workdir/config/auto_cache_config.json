@@ -1,0 +1,11 @@
+{
+    "memory_threshold": 90,
+    "swap_threshold": 80,
+    "schedule_time": "05:00",
+    "enabled": true,
+    "conservative_mode": true,
+    "min_free_memory_gb": 3,
+    "backup_before_cleanup": true,
+    "log_all_activities": true,
+    "container_lifecycle_mode": true
+}

@@ -1,0 +1,27 @@
+# Nexus Orchestrator Proxy List
+# This file contains proxy server configurations that can be auto-detected
+#
+# Format: protocol://[username:password@]host:port
+# Supported protocols: http, https, socks4, socks5
+#
+# Examples:
+
+# HTTP Proxies
+http://proxy.company.com:8080
+http://user:password@proxy.example.com:3128
+
+# HTTPS Proxies
+https://secure-proxy.example.com:8443
+
+# SOCKS Proxies
+socks5://127.0.0.1:1080
+socks4://proxy.local:1080
+
+# Authenticated SOCKS5
+socks5://username:password@proxy.example.com:1080
+
+# Lines starting with # are comments and will be ignored
+# Empty lines are also ignored
+
+# Add your proxy servers below:
+# http://your-proxy-server:port

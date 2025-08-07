@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+
+  nexus-node-001:
+    image: nexusxyz/nexus-cli:latest
+    container_name: nexus-node-001
+    restart: unless-stopped
+    networks:
+      - nexus-network
+    ports:
+      - "10000:10000"
+    environment:
+      - RUST_LOG=info
+      - NEXUS_HOME=/app/.nexus
+      - NETWORK=testnet3
+      - TZ=Asia/Jakarta
+      - NODE_ID=001
+    volumes:
+      - nexus_data_001:/app/.nexus
+      - /tmp/nexus-orchestrator/workdir/credentials.json:/app/.nexus/credentials.json:ro
+    command: ["start", "--headless", "--node-id", "001"]
+    labels:
+      - "nexus.network=true"
+      - "nexus.service=prover"
+      - "nexus.node_id=001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nexus-node-002:
+    image: nexusxyz/nexus-cli:latest
+    container_name: nexus-node-002
+    restart: unless-stopped
+    networks:
+      - nexus-network
+    ports:
+      - "10001:10000"
+    environment:
+      - RUST_LOG=info
+      - NEXUS_HOME=/app/.nexus
+      - NETWORK=testnet3
+      - TZ=Asia/Jakarta
+      - NODE_ID=002
+    volumes:
+      - nexus_data_002:/app/.nexus
+      - /tmp/nexus-orchestrator/workdir/credentials.json:/app/.nexus/credentials.json:ro
+    command: ["start", "--headless", "--node-id", "002"]
+    labels:
+      - "nexus.network=true"
+      - "nexus.service=prover"
+      - "nexus.node_id=002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nexus-node-003:
+    image: nexusxyz/nexus-cli:latest
+    container_name: nexus-node-003
+    restart: unless-stopped
+    networks:
+      - nexus-network
+    ports:
+      - "10002:10000"
+    environment:
+      - RUST_LOG=info
+      - NEXUS_HOME=/app/.nexus
+      - NETWORK=testnet3
+      - TZ=Asia/Jakarta
+      - NODE_ID=003
+    volumes:
+      - nexus_data_003:/app/.nexus
+      - /tmp/nexus-orchestrator/workdir/credentials.json:/app/.nexus/credentials.json:ro
+    command: ["start", "--headless", "--node-id", "003"]
+    labels:
+      - "nexus.network=true"
+      - "nexus.service=prover"
+      - "nexus.node_id=003"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nexus-node-004:
+    image: nexusxyz/nexus-cli:latest
+    container_name: nexus-node-004
+    restart: unless-stopped
+    networks:
+      - nexus-network
+    ports:
+      - "10003:10000"
+    environment:
+      - RUST_LOG=info
+      - NEXUS_HOME=/app/.nexus
+      - NETWORK=testnet3
+      - TZ=Asia/Jakarta
+      - NODE_ID=004
+    volumes:
+      - nexus_data_004:/app/.nexus
+      - /tmp/nexus-orchestrator/workdir/credentials.json:/app/.nexus/credentials.json:ro
+    command: ["start", "--headless", "--node-id", "004"]
+    labels:
+      - "nexus.network=true"
+      - "nexus.service=prover"
+      - "nexus.node_id=004"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  nexus_data_001:
+  nexus_data_002:
+  nexus_data_003:
+  nexus_data_004:
+
+networks:
+  nexus-network:
+    driver: bridge
