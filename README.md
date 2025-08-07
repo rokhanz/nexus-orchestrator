@@ -33,7 +33,8 @@ nexus-orchestrator/
 │   ├── menus/            # Menu modules
 │   └── wrappers/         # Service wrappers
 ├── workdir/              # Working directory
-└── docs/                 # Documentation
+├── nexus_logs.sh         # Log management utility
+└── nexus_cache_cleanup.sh # Cache cleanup utility
 ```
 
 ## 🚀 Quick Start
@@ -145,10 +146,11 @@ Real-time monitoring includes:
 
 ## 📚 Documentation
 
-- [Setup Guide](docs/setup.md)
-- [Configuration Reference](docs/configuration.md)
-- [API Documentation](docs/api.md)
-- [Troubleshooting Guide](docs/troubleshooting.md)
+All documentation is included in this README. For additional help:
+- Check the built-in help: `./main.sh --help`
+- View logs: `./nexus_logs.sh`
+- Troubleshooting section below
+- GitHub Issues for community support
 
 ## 🤝 Support
 
