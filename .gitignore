@@ -1,30 +1,55 @@
-# Nexus Orchestrator - Generated files and sensitive data
-workdir/credentials.json
-workdir/logs/
-workdir/backup/
-workdir/config/
-*.log
-*.tmp
-.debug_mode
-proxy_list.txt
+# IDE and Editor Files
+.vscode/
+*.swp
+*.swo
+*~
 
-# System files
+# System Files
 .DS_Store
 Thumbs.db
-*~
-.*.swp
-.*.swo
 
-# Temporary files
-/tmp/
-temp/
+# Working directory with sensitive data
+workdir/
 
-# IDE files
-.vscode/
-.idea/
-*.sublime-*
+# Backup Files
+*.backup
+*.bak
+*.orig
 
-# OS generated files
+# Log Files
+*.log
+/workdir/logs/*.log
+/workdir/nexus-manager.log
+
+# Temporary Files
+/workdir/temp/
+/workdir/tmp/
+*.tmp
+
+# Sensitive Configuration
+/workdir/credentials.json
+/workdir/config/*.key
+/workdir/config/*.pem
+/workdir/config/*.crt
+
+# Auto-generated Files
+/workdir/auto_cache_config.json.backup
+
+# Node Modules (if any)
+node_modules/
+
+# Python Cache
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+*.pyo
+
+# Development Files
+test_*
+demo_*
+debug_*
+*_test.sh
+*_demo.sh
+
+# Documentation Drafts
+COPILOT.INSTRUCTIONS.md
+SYSTEM_READY.md

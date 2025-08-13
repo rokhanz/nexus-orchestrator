@@ -71,11 +71,12 @@ Nexus Orchestrator features **automatic dependency management**:
    bash main.sh
    ```
 
-2. **Create/Import Wallet**
+2. **Setup Wallet & Node**
 
-   - Navigate to `Wallet & Account Management` (Option 3)
-   - Choose `Create New Wallet` or `Import Existing Wallet`
-   - **Important**: Backup your wallet credentials securely!
+   - Navigate to `Wallet & Node Management` (Option 3)
+   - Choose `Setup New Wallet + Node`
+   - Follow the guided setup process
+   - **Important**: Keep your credentials secure!
 
 3. **Register Node**
 
@@ -90,14 +91,14 @@ Nexus Orchestrator features **automatic dependency management**:
 
 ### 🔧 Main Menu Options
 
-| Option                            | Description                                                     |
-| --------------------------------- | --------------------------------------------------------------- |
-| **🔧 Manage Docker & System**      | Docker health checks, container management, resource monitoring |
-| **📊 Monitor Logs**                | Real-time log monitoring, statistics, error analysis            |
-| **🔑 Wallet & Account Management** | Wallet operations, backup, security management                  |
-| **🌐 Node Management**             | Node registration, multi-node operations, statistics            |
-| **⚙️ Advanced Tools**              | UFW firewall, proxy config, network diagnostics, backups        |
-| **📚 How to Use**                  | Complete usage guide and troubleshooting                        |
+| Option                         | Description                                                     |
+| ------------------------------ | --------------------------------------------------------------- |
+| **🔧 Manage Docker & System**   | Docker health checks, container management, resource monitoring |
+| **📊 Monitor Logs**             | Real-time log monitoring, statistics, error analysis            |
+| **🔑 Wallet & Node Management** | Unified wallet and node ID management                           |
+| **🌐 Node Management**          | Node registration, multi-node operations, statistics            |
+| **⚙️ Advanced Tools**           | UFW firewall, proxy config, network diagnostics, backups        |
+| **📚 How to Use**               | Complete usage guide and troubleshooting                        |
 
 ## 🏗️ Architecture
 
@@ -111,10 +112,10 @@ nexus-orchestrator/
 │   ├── docker-manager.sh      # 🐳 Docker operations and system management
 │   ├── nexus-monitor.sh       # 📊 Monitoring, logs, and statistics
 │   ├── node-manager.sh        # 🌐 Node operations and multi-node management
-│   ├── wallet-manager.sh      # 🔑 Wallet operations and security
+│   ├── wallet-manager.sh      # 🔑 Unified wallet and node operations
 │   └── tools-manager.sh       # ⚙️ Advanced tools and system utilities
 └── workdir/                   # 💾 Runtime data and configurations
-    ├── credentials.json       # 🔐 Encrypted wallet credentials
+    ├── credentials.json       # 🔐 Secure configuration storage
     ├── config/               # ⚙️ Node configurations
     ├── logs/                 # 📝 Application logs
     └── backup/               # 💾 Backup files
@@ -148,7 +149,7 @@ nexus-orchestrator/
 
 ### 🔐 Security Features
 
-- **Encrypted Credentials**: Secure wallet storage
+- **Secure Configuration**: Protected credential storage
 - **UFW Firewall Management**: Automated port configuration
 - **Proxy Support**: Rate limiting avoidance
 - **Backup Encryption**: Secure configuration backups
@@ -209,7 +210,7 @@ services:
 | ----------------------------- | ------------------------------------------------------------- |
 | **Docker daemon not running** | `sudo systemctl start docker && sudo systemctl enable docker` |
 | **Permission denied**         | `sudo usermod -aG docker $USER` (then logout/login)           |
-| **Node registration fails**   | Check internet connection and wallet credentials              |
+| **Node registration fails**   | Check internet connection and configuration                   |
 | **Container restarts**        | Monitor logs and check system resources                       |
 | **Rate limiting**             | Configure proxy in Advanced Tools                             |
 
@@ -279,11 +280,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Troubleshooting**: Detailed solutions for common issues
 - **Best Practices**: Performance optimization tips
 
-### Community
+### Community & Support
 
 - **GitHub Issues**: [Report bugs or request features](https://github.com/rokhanz/nexus-orchestrator/issues)
-- **Nexus Discord**: [Official Nexus community](https://discord.gg/nexusxyz)
-- **Nexus Forum**: [Official forum discussions](https://forum.nexus.xyz)
+- **Documentation**: Comprehensive guides available within the application
+- **Support**: Check built-in troubleshooting guides
+
+### 💝 Support Development
+
+If this project helps you, consider supporting the development:
+
+[![Support via Saweria](https://img.shields.io/badge/Support-Saweria-orange.svg)](https://saweria.co/rokhanz)
+
+**Saweria**: [saweria.co/rokhanz](https://saweria.co/rokhanz)
 
 ## 🔄 Updates
 

@@ -262,20 +262,38 @@ monitor_all_nodes_realtime() {
         while IFS= read -r container; do
             [[ -n "$container" ]] || continue
             echo -e "${CYAN}📦 Container: $container${NC}"
-            
-            # Get last 5 lines for each container
+
+            # Get last 10 lines for each container with better formatting
             local logs
-            logs=$(docker logs --tail 5 "$container" 2>&1 | tail -3)
-            
+            logs=$(docker logs --tail 10 "$container" 2>&1 | tail -10)
+
             if [[ -n "$logs" ]]; then
                 echo "$logs" | while IFS= read -r line; do
                     [[ -z "$line" ]] && continue
-                    case $line in
-                        *"Success"*|*"Submitted"*|*"points"*)
-                            echo -e "  ${GREEN}$line${NC}"
+
+                    # Parse timestamp and message
+                    local timestamp message
+                    if [[ "$line" =~ ^\[([0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2})\](.*)$ ]]; then
+                        timestamp="${BASH_REMATCH[1]}"
+                        message="${BASH_REMATCH[2]}"
+                    else
+                        timestamp=""
+                        message="$line"
+                    fi
+
+                    # Format based on content
+                    case $message in
+                        *"Success"*|*"Submitted"*|*"points"*|*"Step"*"4"*|*"Generating proof"*)
+                            echo -e "  ${GREEN}Success${NC} ${LIGHT_BLUE}[$timestamp]${NC} $message"
                             ;;
-                        *"Error"*|*"Failed"*|*"error"*)
-                            echo -e "  ${RED}$line${NC}"
+                        *"Error"*|*"Failed"*|*"error"*|*"timeout"*)
+                            echo -e "  ${RED}Error${NC} ${LIGHT_BLUE}[$timestamp]${NC} $message"
+                            ;;
+                        *"Waiting"*|*"rate limited"*|*"retrying"*)
+                            echo -e "  ${YELLOW}Waiting${NC} ${LIGHT_BLUE}[$timestamp]${NC} $message"
+                            ;;
+                        *"Step 1"*|*"Requesting task"*)
+                            echo -e "  ${CYAN}Refresh${NC} ${LIGHT_BLUE}[$timestamp]${NC} $message"
                             ;;
                         *)
                             echo "  $line"
