@@ -242,8 +242,8 @@ add_new_node_id() {
         return
     fi
 
-    # Add node ID
-    jq --arg node "$new_node_id" '.node_ids += [$node] | .last_updated = now | strftime("%Y-%m-%dT%H:%M:%S%z")' "$credentials_file" > "${credentials_file}.tmp" && mv "${credentials_file}.tmp" "$credentials_file"
+    # Add node ID with proper timestamp
+    jq --arg node "$new_node_id" --arg timestamp "$(date -Iseconds)" '.node_ids += [$node] | .last_updated = $timestamp' "$credentials_file" > "${credentials_file}.tmp" && mv "${credentials_file}.tmp" "$credentials_file"
 
     echo -e "${GREEN}✅ Node ID added successfully!${NC}"
     sleep 2
@@ -286,10 +286,10 @@ edit_node_id() {
                 return
             fi
 
-            # Replace the node ID
-            jq --arg old_node "$node_to_edit" --arg new_node "$new_node_id" '
+            # Replace the node ID with proper timestamp
+            jq --arg old_node "$node_to_edit" --arg new_node "$new_node_id" --arg timestamp "$(date -Iseconds)" '
                 .node_ids = (.node_ids | map(if . == $old_node then $new_node else . end)) |
-                .last_updated = now | strftime("%Y-%m-%dT%H:%M:%S%z")
+                .last_updated = $timestamp
             ' "$credentials_file" > "${credentials_file}.tmp" && mv "${credentials_file}.tmp" "$credentials_file"
 
             echo -e "${GREEN}✅ Node ID updated successfully!${NC}"
@@ -329,8 +329,8 @@ remove_node_id() {
             read -r confirm
 
             if [[ "$confirm" == "yes" ]]; then
-                # Remove the selected node
-                jq --arg node "$node_to_remove" '.node_ids = (.node_ids - [$node]) | .last_updated = now | strftime("%Y-%m-%dT%H:%M:%S%z")' "$credentials_file" > "${credentials_file}.tmp" && mv "${credentials_file}.tmp" "$credentials_file"
+                # Remove the selected node with proper timestamp
+                jq --arg node "$node_to_remove" --arg timestamp "$(date -Iseconds)" '.node_ids = (.node_ids - [$node]) | .last_updated = $timestamp' "$credentials_file" > "${credentials_file}.tmp" && mv "${credentials_file}.tmp" "$credentials_file"
 
                 echo -e "${GREEN}✅ Node ID removed successfully!${NC}"
                 sleep 2
