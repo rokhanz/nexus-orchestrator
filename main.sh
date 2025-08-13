@@ -651,8 +651,14 @@ if ! check_and_install_dependencies; then
     echo "  2. Logout and login after Docker group changes"
     echo "  3. Check your internet connection"
     echo ""
-    read -r -p "$(echo -e "${YELLOW}Press Enter to continue anyway or Ctrl+C to exit...${NC}")"3
+    read -r -p "$(echo -e "${YELLOW}Press Enter to continue anyway or Ctrl+C to exit...${NC}")"
+fi
 
+# Check and create swap memory if needed
+if ! check_and_create_swap; then
+    echo -e "${YELLOW}⚠️ Swap creation failed but system can still work${NC}"
+    echo -e "${BLUE}💡 For optimal performance, consider creating swap manually${NC}"
+    sleep 2
 fi
 
 # Start main menu

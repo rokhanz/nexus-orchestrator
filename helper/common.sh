@@ -557,6 +557,96 @@ check_and_install_dependencies() {
     echo ""
 }
 
+## check_and_create_swap - Auto create 10GB swap if not exists
+check_and_create_swap() {
+    echo -e "${CYAN}💾 Checking swap memory configuration...${NC}"
+    sleep 2
+
+    # Check current swap status
+    local swap_total
+    swap_total=$(free -m | awk '/^Swap:/ {print $2}')
+
+    if [[ "$swap_total" -eq 0 ]]; then
+        echo -e "${YELLOW}⚠️ No swap memory detected${NC}"
+        echo -e "${CYAN}🔧 Creating 10GB swap file for better performance...${NC}"
+        sleep 2
+
+        # Check available disk space (need at least 12GB for 10GB swap + buffer)
+        local available_space
+        available_space=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
+
+        if [[ "$available_space" -lt 12 ]]; then
+            echo -e "${RED}❌ Insufficient disk space. Need at least 12GB available${NC}"
+            echo -e "${YELLOW}💡 Available space: ${available_space}GB${NC}"
+            return 1
+        fi
+
+        echo -e "${YELLOW}📁 Creating swap file (this may take a few minutes)...${NC}"
+        sleep 1
+
+        # Create 10GB swap file
+        if sudo fallocate -l 10G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1024 count=10485760 status=progress; then
+            echo -e "${GREEN}✅ Swap file created${NC}"
+            sleep 1
+        else
+            echo -e "${RED}❌ Failed to create swap file${NC}"
+            return 1
+        fi
+
+        echo -e "${YELLOW}🔐 Setting swap file permissions...${NC}"
+        sudo chmod 600 /swapfile
+        sleep 1
+
+        echo -e "${YELLOW}🔧 Setting up swap area...${NC}"
+        if sudo mkswap /swapfile; then
+            echo -e "${GREEN}✅ Swap area configured${NC}"
+            sleep 1
+        else
+            echo -e "${RED}❌ Failed to setup swap area${NC}"
+            return 1
+        fi
+
+        echo -e "${YELLOW}🚀 Enabling swap...${NC}"
+        if sudo swapon /swapfile; then
+            echo -e "${GREEN}✅ Swap enabled successfully${NC}"
+            sleep 1
+        else
+            echo -e "${RED}❌ Failed to enable swap${NC}"
+            return 1
+        fi
+
+        echo -e "${YELLOW}💾 Making swap permanent...${NC}"
+        if ! grep -q '/swapfile' /etc/fstab; then
+            echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
+            echo -e "${GREEN}✅ Swap made permanent${NC}"
+        fi
+        sleep 1
+
+        # Configure swappiness for better performance
+        echo -e "${YELLOW}⚙️ Optimizing swap settings...${NC}"
+        echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf > /dev/null
+        sudo sysctl vm.swappiness=10 > /dev/null
+        echo -e "${GREEN}✅ Swap optimized (swappiness=10)${NC}"
+        sleep 1
+
+        # Display final status
+        echo -e "${CYAN}📊 Final swap status:${NC}"
+        free -h | grep -E "Mem:|Swap:"
+
+    elif [[ "$swap_total" -lt 8192 ]]; then
+        echo -e "${YELLOW}⚠️ Swap memory detected but less than 8GB (${swap_total}MB)${NC}"
+        echo -e "${BLUE}💡 Current swap: $(($swap_total / 1024))GB${NC}"
+        echo -e "${BLUE}💡 For optimal performance, consider 10GB+ swap for Nexus mining${NC}"
+
+    else
+        echo -e "${GREEN}✅ Sufficient swap memory detected: $(($swap_total / 1024))GB${NC}"
+    fi
+
+    echo -e "${GREEN}✅ Swap memory check completed${NC}"
+    echo ""
+    sleep 1
+}
+
 ## install_docker - Install Docker
 install_docker() {
     echo -e "${YELLOW}🐳 Installing Docker...${NC}"
