@@ -1,0 +1,36 @@
+# Generated with preserved working configuration
+# Node ID: 8163296 (Enhanced with cleanup)
+# Image: nexusxyz/nexus-cli:latest (WORKING ✅)
+# Command format: start --headless --node-id (WORKING ✅)
+# Generated: 2025-08-13T13:13:51+07:00
+
+services:
+  nexus-node-8163296:
+    image: nexusxyz/nexus-cli:latest
+    container_name: nexus-node-8163296
+    restart: unless-stopped
+    environment:
+      - NEXUS_HOME=/root/.nexus
+      - RUST_LOG=info
+      - TZ=Asia/Jakarta
+      - NODE_ID=8163296
+      - HTTP_PROXY=http://shankara:shazfa07@193.160.78.97:5777
+      - HTTPS_PROXY=http://shankara:shazfa07@193.160.78.97:5777
+      - http_proxy=http://shankara:shazfa07@193.160.78.97:5777
+      - https_proxy=http://shankara:shazfa07@193.160.78.97:5777
+    volumes:
+      - nexus_data_8163296:/root/.nexus
+    ports:
+      - "10296:10296"
+    command: ["start", "--headless", "--node-id", "8163296"]
+    labels:
+      - "nexus.orchestrator=true"
+      - "nexus.node_id=8163296"
+      - "nexus.port=10296"
+
+volumes:
+  nexus_data_8163296:
+    driver: local
+    labels:
+      - "nexus.node_id=8163296"
+

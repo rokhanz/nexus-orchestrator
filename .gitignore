@@ -1,0 +1,30 @@
+# Nexus Orchestrator - Generated files and sensitive data
+workdir/credentials.json
+workdir/logs/
+workdir/backup/
+workdir/config/
+*.log
+*.tmp
+.debug_mode
+proxy_list.txt
+
+# System files
+.DS_Store
+Thumbs.db
+*~
+.*.swp
+.*.swo
+
+# Temporary files
+/tmp/
+temp/
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# OS generated files
+__pycache__/
+*.py[cod]
+*$py.class
